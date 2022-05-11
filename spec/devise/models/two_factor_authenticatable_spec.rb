@@ -1,14 +1,16 @@
 require 'spec_helper'
 require 'active_model'
 
-class TwoFactorAuthenticatableDouble
-  extend ::ActiveModel::Callbacks
-  include ::ActiveModel::Validations::Callbacks
+ActiveRecord::Base.connection.create_table :two_factor_authenticatable_doubles, force: true do |t|
+  t.string :otp_secret
+end
+
+class TwoFactorAuthenticatableDouble < ActiveRecord::Base
   extend  ::Devise::Models
 
   define_model_callbacks :update
 
-  devise :two_factor_authenticatable, :otp_secret_encryption_key => 'test-key'*4
+  devise :two_factor_authenticatable, :otp_secret_encryption_key => 'test-key' * 4
 
   attr_accessor :consumed_timestep
 
@@ -18,7 +20,11 @@ class TwoFactorAuthenticatableDouble
   end
 end
 
-class TwoFactorAuthenticatableWithCustomizeAttrEncryptedDouble
+ActiveRecord::Base.connection.create_table :two_factor_authenticatable_with_custom_options_doubles, force: true do |t|
+  t.string :otp_secret
+end
+
+class TwoFactorAuthenticatableWithCustomOptionsDouble < ActiveRecord::Base
   extend ::ActiveModel::Callbacks
   include ::ActiveModel::Validations::Callbacks
 
@@ -33,7 +39,9 @@ class TwoFactorAuthenticatableWithCustomizeAttrEncryptedDouble
 
   define_model_callbacks :update
 
-  devise :two_factor_authenticatable, :otp_secret_encryption_key => 'test-key'*4
+  devise :two_factor_authenticatable, :otp_secret_encryption_options => {
+    key_provider: ActiveRecord::Encryption::DeterministicKeyProvider.new('test-key' * 8)
+  }
 
   attr_accessor :consumed_timestep
 
@@ -53,7 +61,7 @@ end
 
 describe ::Devise::Models::TwoFactorAuthenticatable do
   context 'When included in a class' do
-    subject { TwoFactorAuthenticatableWithCustomizeAttrEncryptedDouble.new }
+    subject { TwoFactorAuthenticatableWithCustomOptionsDouble.new }
 
     it_behaves_like 'two_factor_authenticatable'
 
@@ -63,16 +71,10 @@ describe ::Devise::Models::TwoFactorAuthenticatable do
     end
 
     describe 'otp_secret options' do
-      it 'should be of the key' do
-        expect(subject.encrypted_attributes[:otp_secret][:key]).to eq('test-key'*8)
-      end
-
-      it 'should be of the mode' do
-        expect(subject.encrypted_attributes[:otp_secret][:mode]).to eq(:per_attribute_iv_and_salt)
-      end
-
-      it 'should be of the mode' do
-        expect(subject.encrypted_attributes[:otp_secret][:algorithm]).to eq('aes-256-cbc')
+      it 'should set the options' do
+        expect(subject.class.attribute_types['otp_secret'].scheme.to_h).to match(hash_including(
+          key_provider: instance_of(ActiveRecord::Encryption::DeterministicKeyProvider)
+        ))
       end
     end
   end
